@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import torch
-from diffusers import DiffusionImg2ImgPipeline
+from diffusers import AutoPipelineForImage2Image
 from transformers import BatchEncoding
 from typing_extensions import Self
 from ..intervention.contexts import InterventionTracer
@@ -16,7 +16,7 @@ class Diffuser(util.WrapperModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
 
-        self.pipeline = DiffusionImg2ImgPipeline.from_pretrained(*args, **kwargs)
+        self.pipeline = AutoPipelineForImage2Image.from_pretrained(*args, **kwargs)
         
         for key, value in self.pipeline.__dict__.items():
             if isinstance(value, torch.nn.Module):
@@ -112,7 +112,7 @@ class DiffusionModel(RemoteableMixin):
 
 if TYPE_CHECKING:
 
-    class DiffusionModel(DiffusionModel, DiffusionImg2ImgPipeline):
+    class DiffusionModel(DiffusionModel, AutoPipelineForImage2Image):
 
         def generate(self, *args, **kwargs) -> InterventionTracer:
             return self._model.pipeline(*args, **kwargs)
