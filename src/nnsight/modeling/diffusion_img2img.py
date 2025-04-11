@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import torch
-from diffusers import AutoPipelineForImage2Image
+from diffusers import StableDiffusionImg2ImgPipeline
 from transformers import BatchEncoding
 from typing_extensions import Self
 from ..intervention.contexts import InterventionTracer
@@ -16,19 +16,18 @@ class Diffuser(util.WrapperModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
 
-        # Remove device_map from kwargs as it's handled differently
+        # Remove device_map from kwargs
         load_kwargs = kwargs.copy()
         if 'device_map' in load_kwargs:
             del load_kwargs['device_map']
         
-        # Initialize pipeline without device_map
-        self.pipeline = AutoPipelineForImage2Image.from_pretrained(
+        # Initialize pipeline without device placement
+        self.pipeline = StableDiffusionImg2ImgPipeline.from_pretrained(
             *args,
-            device_map=None,
             **load_kwargs
         )
         
-        # Move pipeline to device
+        # Move pipeline components to device
         self.pipeline = self.pipeline.to("cuda:0")
         
         for key, value in self.pipeline.__dict__.items():
@@ -43,21 +42,17 @@ class DiffusionModel(RemoteableMixin):
     __methods__ = {"generate": "_generate"}
 
     def __init__(self, *args, **kwargs) -> None:
-
         self._model: Diffuser = None
-
         super().__init__(*args, **kwargs)
         
     def _load_meta(self, repo_id:str, **kwargs):
-        # Remove device_map from kwargs if it exists since it's handled by Diffuser
+        # Remove device_map from kwargs
         load_kwargs = kwargs.copy()
         if 'device_map' in load_kwargs:
             del load_kwargs['device_map']
         
         model = Diffuser(
             repo_id,
-            device_map=None,
-            low_cpu_mem_usage=False,
             **load_kwargs,
         )
 
@@ -65,9 +60,12 @@ class DiffusionModel(RemoteableMixin):
         
 
     def _load(self, repo_id: str, device_map=None, **kwargs) -> Diffuser:
-
-        model = Diffuser(repo_id, device_map=device_map, **kwargs)
-
+        # Remove device_map from kwargs
+        load_kwargs = kwargs.copy()
+        if 'device_map' in load_kwargs:
+            del load_kwargs['device_map']
+            
+        model = Diffuser(repo_id, **load_kwargs)
         return model
 
     def _prepare_input(
@@ -87,13 +85,11 @@ class DiffusionModel(RemoteableMixin):
     ) -> torch.Tensor:
 
         if batched_inputs is None:
-
             return ((prepared_inputs, ), {})
 
         return (batched_inputs + prepared_inputs, )
 
     def _execute(self, prepared_inputs: Any, *args, **kwargs):
-
         return self._model.unet(
             prepared_inputs,
             *args,
@@ -103,7 +99,6 @@ class DiffusionModel(RemoteableMixin):
     def _generate(
         self, prepared_inputs: Any, *args, seed: int = None, **kwargs
     ):
-
         if self._scanning():
             kwargs["num_inference_steps"] = 1
 
@@ -136,9 +131,7 @@ class DiffusionModel(RemoteableMixin):
 
 
 if TYPE_CHECKING:
-
-    class DiffusionModel(DiffusionModel, AutoPipelineForImage2Image):
-
+    class DiffusionModel(DiffusionModel, StableDiffusionImg2ImgPipeline):
         def generate(self, *args, **kwargs) -> InterventionTracer:
             return self._model.pipeline(*args, **kwargs)
 
