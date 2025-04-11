@@ -36,13 +36,16 @@ class DiffusionModel(RemoteableMixin):
         super().__init__(*args, **kwargs)
         
     def _load_meta(self, repo_id:str, **kwargs):
-        
+        # Remove device_map from kwargs if it exists since it's handled by Diffuser
+        load_kwargs = kwargs.copy()
+        if 'device_map' in load_kwargs:
+            del load_kwargs['device_map']
         
         model = Diffuser(
             repo_id,
             device_map=None,
             low_cpu_mem_usage=False,
-            **kwargs,
+            **load_kwargs,
         )
 
         return model
