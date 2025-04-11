@@ -16,7 +16,20 @@ class Diffuser(util.WrapperModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
 
-        self.pipeline = AutoPipelineForImage2Image.from_pretrained(*args, **kwargs)
+        # Remove device_map from kwargs as it's handled differently
+        load_kwargs = kwargs.copy()
+        if 'device_map' in load_kwargs:
+            del load_kwargs['device_map']
+        
+        # Initialize pipeline without device_map
+        self.pipeline = AutoPipelineForImage2Image.from_pretrained(
+            *args,
+            device_map=None,
+            **load_kwargs
+        )
+        
+        # Move pipeline to device
+        self.pipeline = self.pipeline.to("cuda:0")
         
         for key, value in self.pipeline.__dict__.items():
             if isinstance(value, torch.nn.Module):
