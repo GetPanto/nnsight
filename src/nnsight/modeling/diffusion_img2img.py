@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import torch
-from diffusers import StableDiffusionImg2ImgPipeline
+from diffusers import AutoPipelineForImage2Image
 from transformers import BatchEncoding
 from typing_extensions import Self
 from ..intervention.contexts import InterventionTracer
@@ -16,7 +16,7 @@ class Diffuser(util.WrapperModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
 
-        self.pipeline = StableDiffusionImg2ImgPipeline.from_pretrained(*args, **kwargs)
+        self.pipeline = AutoPipelineForImage2Image.from_pretrained(*args, **kwargs)
         
         for key, value in self.pipeline.__dict__.items():
             if isinstance(value, torch.nn.Module):
@@ -89,30 +89,39 @@ class DiffusionModel(RemoteableMixin):
     ):
 
         if self._scanning():
-
             kwargs["num_inference_steps"] = 1
 
         generator = torch.Generator()
-
         if seed is not None:
-
             if isinstance(prepared_inputs, list):
                 generator = [torch.Generator().manual_seed(seed) for _ in range(len(prepared_inputs))]
             else:
                 generator = generator.manual_seed(seed)
             
+        # Ensure text embeddings are properly handled
+        if "prompt" in kwargs:
+            text_inputs = self.tokenizer(
+                kwargs["prompt"],
+                padding="max_length",
+                max_length=self.tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt"
+            )
+            text_inputs = text_inputs.to(self.pipeline.device)
+            kwargs["prompt_embeds"] = self.pipeline.text_encoder(text_inputs.input_ids)[0]
+            
         output = self._model.pipeline(
-            prepared_inputs, *args, generator=generator, **kwargs
+            *args,
+            generator=generator,
+            **kwargs
         )
-
-        output = self._model(output)
 
         return output
 
 
 if TYPE_CHECKING:
 
-    class DiffusionModel(DiffusionModel, StableDiffusionImg2ImgPipeline):
+    class DiffusionModel(DiffusionModel, AutoPipelineForImage2Image):
 
         def generate(self, *args, **kwargs) -> InterventionTracer:
             return self._model.pipeline(*args, **kwargs)
